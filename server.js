@@ -89,9 +89,49 @@ function generateDefaultLocations() {
   return locs;
 }
 
+function getDefaultSeedOrder() {
+  const items = [
+    { stt: 1, sku: '55060330', itemName: 'Bánh Bauli Moonfils Choco 45 (45g x 20cái)', uom: 'CAI', expectedQty: 9, receivedQty: 9, putawayQty: 0, putawayAllocations: [], batchNo: 'LOT-260716', expiryDate: '2026-08-15' },
+    { stt: 2, sku: '55060331', itemName: 'Bánh Bauli Moonfils Vanilla 45 (45g x 20cái)', uom: 'CAI', expectedQty: 9, receivedQty: 9, putawayQty: 0, putawayAllocations: [], batchNo: 'LOT-260716', expiryDate: '2026-08-15' },
+    { stt: 3, sku: '55060332', itemName: 'Bánh Bauli Moonfils Strawberry 45 (45g x 20cái)', uom: 'CAI', expectedQty: 11, receivedQty: 11, putawayQty: 0, putawayAllocations: [], batchNo: 'LOT-260716', expiryDate: '2026-08-15' },
+    { stt: 4, sku: '55060344', itemName: 'Bánh mì hoa cúc Otto 80 (80g x 12 cái)', uom: 'CAI', expectedQty: 65, receivedQty: 65, putawayQty: 0, putawayAllocations: [], batchNo: 'LOT-260716', expiryDate: '2026-08-15' },
+    { stt: 5, sku: '55060346', itemName: 'BÁNH CROISSANT NHÂN KEM PHÔ MAI – BAULI MOONFILS 45 (45g x 20cái)', uom: 'CAI', expectedQty: 7, receivedQty: 7, putawayQty: 0, putawayAllocations: [], batchNo: 'LOT-260716', expiryDate: '2026-08-15' },
+    { stt: 6, sku: '55060366', itemName: 'Bánh mì Otto Sandwich tươi lạt 245 (245g x 6túi)', uom: 'TUI', expectedQty: 79, receivedQty: 79, putawayQty: 0, putawayAllocations: [], batchNo: 'LOT-260716', expiryDate: '2026-08-15' },
+    { stt: 7, sku: '55060446', itemName: 'Bánh mì Otto tươi kem bơ sữa mới 90_MT', uom: 'CAI', expectedQty: 85, receivedQty: 85, putawayQty: 0, putawayAllocations: [], batchNo: 'LOT-260716', expiryDate: '2026-08-15' },
+    { stt: 8, sku: '55060505', itemName: 'Bánh Bông Lan Tròn Otto Chà Bông Gà Cay 38 (38g x 12 cái)', uom: 'CAI', expectedQty: 60, receivedQty: 60, putawayQty: 0, putawayAllocations: [], batchNo: 'LOT-260716', expiryDate: '2026-08-15' },
+    { stt: 9, sku: '55060517', itemName: 'Bánh Bông Lan Cuộn Otto Kem Lá Dứa 60 (60g x 12 cái)', uom: 'CAI', expectedQty: 50, receivedQty: 50, putawayQty: 0, putawayAllocations: [], batchNo: 'LOT-260716', expiryDate: '2026-08-15' },
+    { stt: 10, sku: '55060518', itemName: 'Bánh Bông Lan Cuộn Otto Kem Dâu 60 (60g x 12 cái)', uom: 'CAI', expectedQty: 62, receivedQty: 62, putawayQty: 0, putawayAllocations: [], batchNo: 'LOT-260716', expiryDate: '2026-08-15' },
+    { stt: 11, sku: '55060519', itemName: 'Bánh Bông Lan Cuộn Otto Kem Socola 60 (60g x 12 cái)', uom: 'CAI', expectedQty: 50, receivedQty: 50, putawayQty: 0, putawayAllocations: [], batchNo: 'LOT-260716', expiryDate: '2026-08-15' },
+    { stt: 12, sku: '55060520', itemName: 'Bánh Bông Lan Cuộn Otto Kem Cam 60 (60g x 12 cái)', uom: 'CAI', expectedQty: 47, receivedQty: 47, putawayQty: 0, putawayAllocations: [], batchNo: 'LOT-260716', expiryDate: '2026-08-15' },
+    { stt: 13, sku: '55060521', itemName: 'Bánh Bông Lan Cuộn Otto Kem Vani 60 (60g x 12 cái)', uom: 'CAI', expectedQty: 58, receivedQty: 58, putawayQty: 0, putawayAllocations: [], batchNo: 'LOT-260716', expiryDate: '2026-08-15' },
+    { stt: 14, sku: '55060525', itemName: 'Bánh Bông Lan Tròn Otto Phô Mai Cay 38 (38g x 12 cái)', uom: 'CAI', expectedQty: 65, receivedQty: 65, putawayQty: 0, putawayAllocations: [], batchNo: 'LOT-260716', expiryDate: '2026-08-15' },
+    { stt: 15, sku: '55060573', itemName: 'Bánh Bông Lan Tròn Otto Phô Mai Sữa 38 (38g x 12 cái)', uom: 'CAI', expectedQty: 70, receivedQty: 70, putawayQty: 0, putawayAllocations: [], batchNo: 'LOT-260716', expiryDate: '2026-08-15' }
+  ];
+
+  return {
+    id: 'IB-20260716-0001',
+    orderCode: 'IB-20260716-0001',
+    poNumber: 'PO-4192784668',
+    supplier: 'Giao Hàng Nhanh (GHN) - Lấy Date Mới trên 70%',
+    orderDate: '2026-07-16',
+    sourceFileName: 'Booking GIao hàng Nhanh ngày 16.07.2026.xlsx',
+    note: 'Đơn nhập hàng tươi theo kế hoạch phân bổ GHN',
+    status: 'RECEIVED',
+    statusLabel: 'Đã nhận hàng',
+    putawayAllowed: true,
+    receivingLocation: 'InboundQC',
+    items,
+    totalExpectedQty: 727,
+    totalReceivedQty: 727,
+    createdAt: new Date().toISOString(),
+    receivedAt: new Date().toISOString(),
+    putawayAt: null
+  };
+}
+
 function emptyDB() {
   return {
-    inboundOrders: [],
+    inboundOrders: [getDefaultSeedOrder()],
     putawayTasks: [],
     inventory: [],
     stockMovements: [],
@@ -125,6 +165,10 @@ function loadDB() {
       dbCache.locations = generateDefaultLocations();
       saveDB(dbCache);
     }
+    if (!dbCache.inboundOrders || dbCache.inboundOrders.length === 0) {
+      dbCache.inboundOrders = [getDefaultSeedOrder()];
+      saveDB(dbCache);
+    }
     return dbCache;
   }
 
@@ -144,6 +188,10 @@ function loadDB() {
 
   if (!dbCache.locations || dbCache.locations.length < 50 || !dbCache.locations.some(l => l.code === 'InboundQC')) {
     dbCache.locations = generateDefaultLocations();
+    saveDB(dbCache);
+  }
+  if (!dbCache.inboundOrders || dbCache.inboundOrders.length === 0) {
+    dbCache.inboundOrders = [getDefaultSeedOrder()];
     saveDB(dbCache);
   }
 
