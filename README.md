@@ -1,4 +1,4 @@
-# Honeywell WMS (demo) — Inbound • Putaway • Inventory
+# GHN WMS — Inbound • Putaway • Inventory
 
 Hệ thống quản lý Nhập – Cất kho – Tồn kho cho hàng bánh tươi (GHN Fulfillment).
 

@@ -1,5 +1,5 @@
 /**
- * Honeywell WMS - GHN Fulfillment HCM - Q12
+ * GHN WMS - Fulfillment HCM - Q12
  * Application Core Logic: InboundQC, Multi-Location Putaway (PL.Tam.01 - 100), Real-time Inventory
  */
 

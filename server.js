@@ -995,7 +995,7 @@ app.post('/api/system/reset-demo', (req, res) => {
     locations: generateDefaultLocations()
   };
   saveDB(cleanDB);
-  res.json({ success: true, message: 'Đã thiết lập lại dữ liệu hệ thống Honeywell WMS (InboundQC & PL.Tam.01 đến PL.Tam.100).' });
+  res.json({ success: true, message: 'Đã thiết lập lại dữ liệu hệ thống GHN WMS (InboundQC & PL.Tam.01 đến PL.Tam.100).' });
 });
 
 // Export for Vercel serverless (api/index.js)
@@ -1005,7 +1005,7 @@ module.exports = app;
 if (require.main === module) {
   const server = app.listen(PORT, () => {
     console.log(`====================================================`);
-    console.log(`🚀 Honeywell WMS Server đang chạy tại: http://localhost:${PORT}`);
+    console.log(`🚀 GHN WMS Server đang chạy tại: http://localhost:${PORT}`);
     console.log(`💾 Storage: ${USE_REDIS ? 'Upstash Redis' : 'data/db.json (local)'}`);
     console.log(`====================================================`);
   });
@@ -1014,7 +1014,7 @@ if (require.main === module) {
     if (e.code === 'EADDRINUSE') {
       const nextPort = Number(PORT) + 1;
       app.listen(nextPort, () => {
-        console.log(`🚀 Honeywell WMS Server đang chạy tại: http://localhost:${nextPort}`);
+        console.log(`🚀 GHN WMS Server đang chạy tại: http://localhost:${nextPort}`);
       });
     }
   });
