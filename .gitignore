@@ -1,0 +1,15 @@
+node_modules/
+uploads/
+data/
+.vercel/
+.env
+.env.*
+
+# Business data — do not commit
+*.xlsx
+*.xls
+~$*
+
+# OS / editor
+.DS_Store
+Thumbs.db
