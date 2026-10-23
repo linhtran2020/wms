@@ -3,39 +3,39 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GHN WMS - Fulfillment HCM - Q12(Production)</title>
+  <title>GHN WMS - Fulfillment (Production)</title>
   <link rel="stylesheet" href="css/style.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏢</text></svg>">
 </head>
 <body>
 
-  <!-- ==================== 1. TOP NAVBAR ==================== -->
+  <!-- ==================== 1. TOP NAVBAR (XANH MÒNG KÉT) ==================== -->
   <header class="hw-topbar">
     <div class="topbar-left">
       <div class="hw-logo-badge">
         GHN<span>WMS</span>
       </div>
-      <button class="hamburger-btn" id="btn-toggle-sidebar" title="Toggle Menu">
+      <button class="hamburger-btn" id="btn-toggle-sidebar" title="Ẩn/Hiện Menu">
         ☰
       </button>
     </div>
 
     <div class="topbar-right">
-      <button class="topbar-icon-btn" title="Thông báo">
+      <button class="topbar-icon-btn" title="Thông báo hệ thống">
         🔔
       </button>
-      <button class="topbar-icon-btn" title="Thông tin hệ thống">
+      <button class="topbar-icon-btn" title="Trợ giúp & Thông tin">
         ⓘ
       </button>
-      <div class="user-profile-badge" title="Tài khoản đăng nhập">
+      <div class="user-profile-badge" title="Tài khoản đang đăng nhập">
         <span>👤</span>
-        <strong>Trần Văn Linh [ GHN Fulfillment HCM - Q12(Production) ]</strong>
+        <strong>Trần Văn Linh [ GHN Fulfillment (Production) ]</strong>
         <span style="font-size: 10px;">▼</span>
       </div>
     </div>
   </header>
 
-  <!-- ==================== 2. MAIN LAYOUT ==================== -->
+  <!-- ==================== 2. MAIN LAYOUT (SIDEBAR + WORKSPACE) ==================== -->
   <div class="hw-layout">
 
     <!-- Left Sidebar -->
@@ -43,35 +43,35 @@
       <!-- Function Retrieval Search -->
       <div class="sidebar-search-box">
         <div class="search-input-wrap">
-          <span style="font-size: 12px; color:#64748b;">🔍</span>
+          <span style="font-size: 12px; color:#0d9488;">🔍</span>
           <input type="text" id="sidebar-search-input" placeholder="Function Retrieval">
           <span class="retrieval-icon" title="Switch Mode">⇄</span>
         </div>
       </div>
 
-      <!-- Navigation Tree Items -->
+      <!-- Navigation Tree Items (Single Source of Navigation) -->
       <ul class="sidebar-menu">
-        <li class="menu-item active" data-tab="home">
+        <li class="menu-item active" data-tab="home" data-title="Trang Chủ (Dashboard)">
           <span class="menu-icon">🕒</span>
           <span>Common Functions</span>
         </li>
-        <li class="menu-item" data-tab="inbound">
+        <li class="menu-item" data-tab="inbound" data-title="Quản Lý Đơn Nhập Kho (Inbound)">
           <span class="menu-icon">📄</span>
           <span>Inbound</span>
         </li>
-        <li class="menu-item" data-tab="putaway">
+        <li class="menu-item" data-tab="putaway" data-title="Cất Kho Theo SKU Đa Vị Trí (Putaway)">
           <span class="menu-icon">🚀</span>
           <span>Putaway (PL.Tam)</span>
         </li>
-        <li class="menu-item" data-tab="inventory">
+        <li class="menu-item" data-tab="inventory" data-title="Báo Cáo Tồn Kho Real-time (Inventory)">
           <span class="menu-icon">📊</span>
           <span>Inventory</span>
         </li>
-        <li class="menu-item" data-tab="outbound">
+        <li class="menu-item" data-tab="outbound" data-title="Quản Lý Đơn Xuất Kho (Outbound)">
           <span class="menu-icon">🛒</span>
           <span>Outbound</span>
         </li>
-        <li class="menu-item" data-tab="tasks">
+        <li class="menu-item" data-tab="tasks" data-title="Nhiệm Vụ Kho (Tasks)">
           <span class="menu-icon">📑</span>
           <span>Tasks</span>
         </li>
@@ -112,23 +112,15 @@
 
     <!-- Right Workspace Area -->
     <main class="hw-workspace">
-      <!-- Workspace Tabs Bar -->
-      <div class="workspace-tabs-bar">
-        <button class="wms-tab-btn active" data-tab="home">
-          <span>🏠</span> Home
-        </button>
-        <button class="wms-tab-btn" data-tab="inbound">
-          <span>📄</span> Inbound (Nhập Kho)
-        </button>
-        <button class="wms-tab-btn" data-tab="putaway">
-          <span>🚀</span> Putaway (PL.Tam.01 - 100)
-        </button>
-        <button class="wms-tab-btn" data-tab="inventory">
-          <span>📊</span> Inventory (Tồn Kho)
-        </button>
-        <button class="wms-tab-btn" data-tab="outbound">
-          <span>🛒</span> Outbound (Sheet OB)
-        </button>
+      <!-- Clean Top Module Header (Replaced horizontal tabs) -->
+      <div class="workspace-header-bar">
+        <div class="current-module-title">
+          <span id="current-module-icon" style="font-size: 18px;">🏠</span>
+          <span id="current-module-name">Trang Chủ (Dashboard)</span>
+        </div>
+        <div class="current-module-breadcrumb">
+          <span>Hệ Thống</span> / <strong id="current-module-sub">Common Functions</strong>
+        </div>
       </div>
 
       <!-- Tab Content Area -->
@@ -151,20 +143,20 @@
               <!-- Quick Launch Actions -->
               <div class="home-quick-actions">
                 <button class="home-action-btn" onclick="switchTab('inbound')">
-                  <span style="color:var(--hw-red);">📥</span> Tạo Đơn Nhập & Nhận vào InboundQC
+                  <span style="color:var(--teal-600);">📥</span> Tạo Đơn Nhập & Nhận vào InboundQC
                 </button>
                 <button class="home-action-btn" onclick="switchTab('putaway')">
-                  <span style="color:#0284c7;">🚀</span> Putaway Đa Vị Trí PL.Tam.01 - 100
+                  <span style="color:var(--teal-700);">🚀</span> Putaway Đa Vị Trí PL.Tam.01 - 100
                 </button>
                 <button class="home-action-btn" onclick="switchTab('inventory')">
-                  <span style="color:#16a34a;">📊</span> Báo Cáo Tồn Kho Real-time
+                  <span style="color:var(--success);">📊</span> Báo Cáo Tồn Kho Real-time
                 </button>
               </div>
             </div>
 
             <!-- Bottom Right Watermark -->
             <div class="home-bottom-watermark">
-              GHN FULFILLMENT HCM - Q12
+              GHN FULFILLMENT LOGISTICS
             </div>
           </div>
         </div>
@@ -177,7 +169,7 @@
               <p>Quy trình: Upload Excel (Sheet IB) ➔ Tạo đơn <strong>"Đã tạo đơn hàng nhập"</strong> ➔ Nhận hàng vào vị trí mặc định <strong>InboundQC</strong> ➔ Đổi trạng thái <strong>"Đã nhận hàng"</strong> & Cho phép Putaway.</p>
             </div>
             <div style="display: flex; gap: 8px;">
-              <button class="btn btn-red" id="btn-quick-inbound">
+              <button class="btn btn-teal" id="btn-quick-inbound">
                 <span>⚡</span> Nạp Sheet IB từ file có sẵn
               </button>
               <button class="btn btn-secondary" onclick="document.getElementById('inbound-file-input').click()">
@@ -187,17 +179,65 @@
             </div>
           </div>
 
+          <!-- PHỄU LỌC THÔNG MINH (PO • NGÀY NHẬP • TRẠNG THÁI • SKU) -->
+          <div class="filter-panel-card">
+            <div class="filter-panel-header">
+              <div class="filter-panel-title">
+                <span>🌪️</span>
+                <strong>Phễu Lọc Dữ Liệu Đơn Nhập (PO • Ngày Nhập • Trạng Thái • SKU)</strong>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button class="btn btn-secondary btn-sm" id="btn-reset-filters">
+                  <span>🔄</span> Đặt Lại
+                </button>
+                <button class="btn btn-teal btn-sm" id="btn-apply-filters">
+                  <span>🔍</span> Lọc Dữ Liệu
+                </button>
+              </div>
+            </div>
+            <div class="filter-panel-body">
+              <div class="filter-grid">
+                <!-- 1. PO -->
+                <div class="filter-field">
+                  <label>Số PO (Purchase Order):</label>
+                  <input type="text" id="filter-po" placeholder="VD: 4192784668, PO-01..." class="filter-input">
+                </div>
+                <!-- 2. Ngày Nhập -->
+                <div class="filter-field">
+                  <label>Ngày Nhập Kho:</label>
+                  <input type="date" id="filter-date" class="filter-input">
+                </div>
+                <!-- 3. Trạng Thái -->
+                <div class="filter-field">
+                  <label>Trạng Thái Đơn:</label>
+                  <select id="filter-status" class="filter-input">
+                    <option value="">Tất Cả Trạng Thái</option>
+                    <option value="CREATED">Đã tạo đơn hàng nhập</option>
+                    <option value="RECEIVED">Đã nhận hàng (Tại InboundQC)</option>
+                    <option value="PUTAWAY_IN_PROGRESS">Đang cất kho</option>
+                    <option value="PUTAWAY_COMPLETED">Đã cất kho hoàn tất</option>
+                  </select>
+                </div>
+                <!-- 4. SKU -->
+                <div class="filter-field">
+                  <label>Mã SKU Sản Phẩm:</label>
+                  <input type="text" id="filter-sku" placeholder="VD: 55060330, 55060446..." class="filter-input">
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Preview Table after Excel Parsing -->
-          <div id="inbound-preview-card" class="hw-card" style="display:none; border-color: #0284c7;">
-            <div class="hw-card-header" style="background: #e0f2fe;">
+          <div id="inbound-preview-card" class="hw-card" style="display:none; border-color: var(--teal-400);">
+            <div class="hw-card-header" style="background: var(--teal-50);">
               <div class="hw-card-title">
-                <span style="color:#0369a1;">📋</span>
-                <strong style="color:#0369a1;">Dữ Liệu Trích Xuất Từ Sheet IB (Hình 1)</strong>
+                <span style="color:var(--teal-700);">📋</span>
+                <strong style="color:var(--teal-800);">Dữ Liệu Trích Xuất Từ Sheet IB (Hình 1)</strong>
                 <span id="preview-meta-badge" class="sku-code" style="margin-left: 10px;">14 dòng bánh • 741 cái</span>
               </div>
               <div style="display: flex; gap: 8px;">
                 <button class="btn btn-secondary btn-sm" id="btn-cancel-preview">Hủy</button>
-                <button class="btn btn-red btn-sm" id="btn-confirm-create-order">
+                <button class="btn btn-teal btn-sm" id="btn-confirm-create-order">
                   <span>➕</span> Xác Nhận Tạo Đơn Nhập (Trạng Thái: Đã tạo đơn hàng nhập)
                 </button>
               </div>
@@ -226,15 +266,19 @@
               <div class="hw-card-title">
                 <span>📑</span> Danh Sách Đơn Hàng Nhập Kho (Inbound Orders)
               </div>
-              <button class="btn btn-secondary btn-sm" onclick="loadInboundOrders()">
-                <span>🔄</span> Làm Mới
-              </button>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <span id="inbound-filter-count-badge" class="loc-badge" style="display:none;">Kết quả lọc: 0</span>
+                <button class="btn btn-secondary btn-sm" onclick="loadInboundOrders()">
+                  <span>🔄</span> Làm Mới
+                </button>
+              </div>
             </div>
 
             <table class="hw-table">
               <thead>
                 <tr>
                   <th>Mã Đơn Nhập</th>
+                  <th>Số PO</th>
                   <th>Ngày Nhập</th>
                   <th>Nhà Cung Cấp</th>
                   <th>Vị Trí Nhận Hàng</th>
@@ -276,13 +320,14 @@
               <thead>
                 <tr>
                   <th>Mã Đơn</th>
+                  <th>Số PO</th>
                   <th>Mã SKU</th>
                   <th>Tên Bánh</th>
                   <th>ĐVT</th>
                   <th>Vị Trí Hiện Tại</th>
                   <th style="text-align: right;">Tổng Đã Nhận</th>
                   <th style="text-align: right;">Đã Cất Kho</th>
-                  <th style="text-align: right; color: var(--hw-red);">Còn Chờ Cất</th>
+                  <th style="text-align: right; color: var(--teal-700);">Còn Chờ Cất</th>
                   <th>Vị Trí Đã Phân Bổ</th>
                   <th style="text-align: center; width: 180px;">Thao Tác</th>
                 </tr>
@@ -312,14 +357,14 @@
           <div class="hw-card">
             <div class="hw-card-header" style="flex-wrap: wrap; gap: 10px;">
               <div style="display: flex; gap: 10px; align-items: center;">
-                <input type="text" id="inv-search-input" class="search-input-wrap" placeholder="🔍 Tìm theo SKU, Tên bánh, Vị trí..." style="width: 250px; padding: 6px 12px; border: 1px solid #cbd5e1;">
-                <select id="inv-filter-location" style="padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 4px;">
+                <input type="text" id="inv-search-input" class="search-input-wrap" placeholder="🔍 Tìm theo SKU, Tên bánh, Vị trí..." style="width: 260px; padding: 6px 12px; border: 1px solid var(--border-color);">
+                <select id="inv-filter-location" style="padding: 6px 12px; border: 1px solid var(--border-color); border-radius: 4px; font-family: var(--font-main);">
                   <option value="">Tất cả vị trí (InboundQC & PL.Tam)</option>
                   <option value="InboundQC">Chỉ InboundQC (Chờ cất kho)</option>
                 </select>
               </div>
               <div style="display: flex; gap: 6px;">
-                <button class="btn btn-primary btn-sm" id="btn-inv-summary">Tổng Hợp Theo SKU</button>
+                <button class="btn btn-teal btn-sm" id="btn-inv-summary">Tổng Hợp Theo SKU</button>
                 <button class="btn btn-secondary btn-sm" id="btn-inv-details">Chi Tiết Từng Vị Trí (Bin Level)</button>
                 <button class="btn btn-secondary btn-sm" id="btn-inv-movements">📜 Thẻ Kho (Movements)</button>
               </div>
@@ -396,7 +441,7 @@
               <h2><span>🛒</span> Quản Lý Đơn Xuất Kho (Outbound - Sheet OB)</h2>
               <p>Dữ liệu trích xuất từ sheet <strong>"OB"</strong>: 16 đơn hàng cho chuỗi Vinmart+.</p>
             </div>
-            <button class="btn btn-red" id="btn-load-outbound">
+            <button class="btn btn-teal" id="btn-load-outbound">
               <span>⚡</span> Nạp Đơn Xuất Từ Sheet OB
             </button>
           </div>
@@ -446,11 +491,11 @@
         <div style="display: flex; gap: 16px; margin-bottom: 14px;">
           <div style="flex: 2;">
             <label style="font-size: 12px; font-weight: 700; color: #475569;">Ghi Chú Nhận Hàng:</label>
-            <input type="text" id="receive-note-input" value="Bánh nguyên vẹn, date mới trên 70% từ nhà xe GHN" style="width: 100%; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 4px; margin-top: 4px;">
+            <input type="text" id="receive-note-input" value="Bánh nguyên vẹn, date mới trên 70% từ nhà xe GHN" style="width: 100%; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 4px; margin-top: 4px; font-family: var(--font-main);">
           </div>
           <div style="flex: 1;">
             <label style="font-size: 12px; font-weight: 700; color: #475569;">Vị Trí Nhận Hàng:</label>
-            <input type="text" value="InboundQC" readonly style="width: 100%; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 4px; background: #f1f5f9; font-weight: 700; color: #b45309; margin-top: 4px;">
+            <input type="text" value="InboundQC" readonly style="width: 100%; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 4px; background: #f1f5f9; font-weight: 700; color: #b45309; margin-top: 4px; font-family: var(--font-main);">
           </div>
         </div>
 
@@ -473,7 +518,7 @@
       </div>
       <div class="hw-modal-footer">
         <button class="btn btn-secondary" onclick="closeModal('modal-receive-goods')">Hủy</button>
-        <button class="btn btn-red" id="btn-confirm-receive">
+        <button class="btn btn-teal" id="btn-confirm-receive">
           <span>✅</span> Xác Nhận Nhận Hàng Vào InboundQC & Cho Phép Putaway
         </button>
       </div>
@@ -483,37 +528,37 @@
   <!-- ==================== MODAL: PUTAWAY ĐA VỊ TRÍ (PL.Tam.01 - 100) ==================== -->
   <div id="modal-putaway-sku" class="hw-modal-overlay">
     <div class="hw-modal">
-      <div class="hw-modal-header" style="background: #1e293b;">
+      <div class="hw-modal-header" style="background: var(--teal-900);">
         <h3><span>🚀</span> Phân Bổ Putaway Vào Vị Trí (Cho Phép: PL.Tam.01 đến PL.Tam.100)</h3>
         <button class="hw-modal-close" onclick="closeModal('modal-putaway-sku')">&times;</button>
       </div>
       <div class="hw-modal-body">
         <!-- SKU Info Card -->
-        <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 14px 18px; margin-bottom: 16px;">
+        <div style="background: var(--teal-50); border: 1px solid var(--teal-200); border-radius: 6px; padding: 14px 18px; margin-bottom: 16px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
             <div>
               <span class="sku-code" id="modal-putaway-sku-code" style="font-size: 14px;">55060446</span>
-              <strong id="modal-putaway-sku-name" style="font-size: 15px; margin-left: 8px;">Bánh mì Otto tươi kem bơ sữa mới 90_MT</strong>
+              <strong id="modal-putaway-sku-name" style="font-size: 15px; margin-left: 8px; color: var(--teal-950);">Bánh mì Otto tươi kem bơ sữa mới 90_MT</strong>
             </div>
             <span class="status-pill received" id="modal-putaway-loc-src">Nguồn: InboundQC</span>
           </div>
 
           <div style="display: flex; gap: 24px; font-size: 13px;">
-            <div>Số lượng chờ cất từ InboundQC: <strong id="modal-putaway-total-qty" style="color: var(--hw-red); font-size: 16px;">85</strong> <span id="modal-putaway-uom">CAI</span></div>
-            <div>Đã phân bổ vào các kệ: <strong id="modal-putaway-allocated-qty" style="color: #16a34a; font-size: 16px;">0</strong></div>
-            <div>Còn lại: <strong id="modal-putaway-remaining-qty" style="color: #dc2626; font-size: 16px;">85</strong></div>
+            <div>Số lượng chờ cất từ InboundQC: <strong id="modal-putaway-total-qty" style="color: var(--teal-800); font-size: 16px;">85</strong> <span id="modal-putaway-uom">CAI</span></div>
+            <div>Đã phân bổ vào các kệ: <strong id="modal-putaway-allocated-qty" style="color: var(--success); font-size: 16px;">0</strong></div>
+            <div>Còn lại: <strong id="modal-putaway-remaining-qty" style="color: var(--danger); font-size: 16px;">85</strong></div>
           </div>
         </div>
 
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-          <div style="font-size: 13px; font-weight: 700; color: #334155;">
+          <div style="font-size: 13px; font-weight: 700; color: var(--teal-950);">
             📍 Danh Sách Vị Trí Kệ Tiếp Nhận (PL.Tam.01 ➔ PL.Tam.100):
           </div>
           <div style="display: flex; gap: 8px;">
             <button class="btn btn-secondary btn-sm" id="btn-auto-split-locations" title="Tự động chia đều cho các kệ trống">
               <span>⚡</span> Tự Động Gợi Ý Chia Kệ
             </button>
-            <button class="btn btn-primary btn-sm" id="btn-add-location-row">
+            <button class="btn btn-teal btn-sm" id="btn-add-location-row">
               <span>➕</span> Thêm Vị Trí Cất Mới
             </button>
           </div>
@@ -531,7 +576,7 @@
       </div>
       <div class="hw-modal-footer">
         <button class="btn btn-secondary" onclick="closeModal('modal-putaway-sku')">Đóng</button>
-        <button class="btn btn-red" id="btn-submit-putaway-sku">
+        <button class="btn btn-teal" id="btn-submit-putaway-sku">
           <span>📦</span> Xác Nhận Cất Vào Kệ (Cập Nhật Tồn Kho Từng Vị Trí)
         </button>
       </div>

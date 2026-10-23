@@ -1,6 +1,6 @@
 /**
- * GHN WMS - Fulfillment HCM - Q12
- * Application Core Logic: InboundQC, Multi-Location Putaway (PL.Tam.01 - 100), Real-time Inventory
+ * GHN WMS - Fulfillment (Production)
+ * Application Core Logic: InboundQC, Multi-Location Putaway (PL.Tam.01 - 100), Real-time Inventory & Filters
  */
 
 // Global State
@@ -10,6 +10,7 @@ let currentReceiveOrderId = null;
 let currentPutawayTask = null;
 let putawayAllocations = [];
 let allLocations = [];
+let allInboundOrders = [];
 
 // Initialize on DOM Ready
 document.addEventListener('DOMContentLoaded', () => {
@@ -50,21 +51,14 @@ function closeModal(id) {
   if (modal) modal.classList.remove('active');
 }
 
-// 1. Navigation & Sidebar Setup
+// 1. Navigation & Sidebar Setup (No horizontal tabs)
 function setupNavigation() {
-  // Sidebar items
   document.querySelectorAll('.hw-sidebar .menu-item').forEach(item => {
     item.addEventListener('click', () => {
       const tab = item.dataset.tab;
-      if (tab) switchTab(tab);
-    });
-  });
-
-  // Top workspace tabs
-  document.querySelectorAll('.workspace-tabs-bar .wms-tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const tab = btn.dataset.tab;
-      if (tab) switchTab(tab);
+      const title = item.dataset.title || item.innerText.trim();
+      const icon = item.querySelector('.menu-icon')?.innerText || '📄';
+      if (tab) switchTab(tab, title, icon);
     });
   });
 
@@ -82,18 +76,27 @@ function setupNavigation() {
   }
 }
 
-function switchTab(tabId) {
+function switchTab(tabId, customTitle, customIcon) {
   currentTab = tabId;
-
-  // Update Top Workspace Tabs
-  document.querySelectorAll('.workspace-tabs-bar .wms-tab-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.tab === tabId);
-  });
 
   // Update Sidebar Active state
   document.querySelectorAll('.hw-sidebar .menu-item').forEach(item => {
-    item.classList.toggle('active', item.dataset.tab === tabId);
+    const isMatch = item.dataset.tab === tabId;
+    item.classList.toggle('active', isMatch);
+    if (isMatch && !customTitle) {
+      customTitle = item.dataset.title || item.innerText.trim();
+      customIcon = item.querySelector('.menu-icon')?.innerText || '📄';
+    }
   });
+
+  // Update Header bar title & breadcrumb
+  const iconEl = document.getElementById('current-module-icon');
+  const nameEl = document.getElementById('current-module-name');
+  const subEl = document.getElementById('current-module-sub');
+
+  if (iconEl && customIcon) iconEl.innerText = customIcon;
+  if (nameEl && customTitle) nameEl.innerText = customTitle;
+  if (subEl) subEl.innerText = tabId.toUpperCase();
 
   // Show Active Tab Page
   document.querySelectorAll('.tab-page').forEach(page => {
@@ -128,7 +131,7 @@ function setupDatalistLocations() {
   }
 }
 
-// 3. Event Listeners Setup
+// 3. Event Listeners & Filter Bar Setup
 function setupEventListeners() {
   // Quick Inbound Sample Load
   document.getElementById('btn-quick-inbound')?.addEventListener('click', loadSampleInboundFile);
@@ -169,6 +172,30 @@ function setupEventListeners() {
 
   // Outbound Load Sheet OB
   document.getElementById('btn-load-outbound')?.addEventListener('click', loadSheetOBOutbound);
+
+  // Phễu Lọc (PO • Ngày Nhập • Trạng Thái • SKU)
+  const btnApplyFilter = document.getElementById('btn-apply-filters');
+  const btnResetFilter = document.getElementById('btn-reset-filters');
+
+  if (btnApplyFilter) btnApplyFilter.addEventListener('click', applyInboundFilters);
+  if (btnResetFilter) btnResetFilter.addEventListener('click', resetInboundFilters);
+
+  // Live filter on typing/change
+  ['filter-po', 'filter-date', 'filter-status', 'filter-sku'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input', debounce(applyInboundFilters, 250));
+      el.addEventListener('change', applyInboundFilters);
+    }
+  });
+}
+
+function debounce(fn, ms) {
+  let timer;
+  return function(...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), ms);
+  };
 }
 
 // 4. File Upload & Sheet IB Parsing
@@ -221,7 +248,7 @@ function renderParsedInboundPreview(data) {
   const tbody = document.getElementById('inbound-preview-body');
   const metaBadge = document.getElementById('preview-meta-badge');
 
-  metaBadge.textContent = `${data.itemCount} dòng bánh • Tổng ${data.totalExpectedQty} cái`;
+  metaBadge.textContent = `${data.itemCount} dòng bánh • Tổng ${data.totalExpectedQty} cái (PO: ${data.poNumber || '4192784668'})`;
   tbody.innerHTML = '';
 
   data.items.forEach(it => {
@@ -231,7 +258,7 @@ function renderParsedInboundPreview(data) {
       <td><span class="sku-code">${it.sku}</span></td>
       <td><strong>${it.itemName}</strong></td>
       <td><span class="loc-badge" style="background:#f1f5f9; color:#475569; border-color:#cbd5e1;">${it.uom}</span></td>
-      <td style="text-align:right; font-weight:700; color:#0369a1;">${it.expectedQty.toLocaleString('vi-VN')}</td>
+      <td style="text-align:right; font-weight:700; color:var(--teal-700);">${it.expectedQty.toLocaleString('vi-VN')}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -245,6 +272,7 @@ function confirmCreateInboundOrder() {
   if (!pendingParsedOrder || !pendingParsedOrder.items) return;
 
   const payload = {
+    poNumber: pendingParsedOrder.poNumber || 'PO-4192784668',
     supplier: 'Giao Hàng Nhanh (GHN) - Lấy Date Mới trên 70%',
     orderDate: '2026-07-16',
     sourceFileName: pendingParsedOrder.sourceFileName,
@@ -272,68 +300,129 @@ function confirmCreateInboundOrder() {
     .catch(err => showToast('Lỗi: ' + err.message, 'error'));
 }
 
-// 6. Load Inbound Orders
+// 6. Inbound Filters (PO, Ngày Nhập, Trạng Thái, SKU)
+function applyInboundFilters() {
+  const poVal = document.getElementById('filter-po')?.value.trim().toLowerCase() || '';
+  const dateVal = document.getElementById('filter-date')?.value || '';
+  const statusVal = document.getElementById('filter-status')?.value || '';
+  const skuVal = document.getElementById('filter-sku')?.value.trim().toLowerCase() || '';
+
+  let filtered = allInboundOrders.filter(ord => {
+    // 1. Filter PO
+    if (poVal) {
+      const matchPo = (ord.poNumber && ord.poNumber.toLowerCase().includes(poVal)) ||
+                      (ord.orderCode && ord.orderCode.toLowerCase().includes(poVal));
+      if (!matchPo) return false;
+    }
+    // 2. Filter Date
+    if (dateVal && ord.orderDate !== dateVal) {
+      return false;
+    }
+    // 3. Filter Status
+    if (statusVal && ord.status !== statusVal) {
+      return false;
+    }
+    // 4. Filter SKU
+    if (skuVal) {
+      const matchSku = ord.items && ord.items.some(it =>
+        it.sku.toLowerCase().includes(skuVal) || (it.itemName && it.itemName.toLowerCase().includes(skuVal))
+      );
+      if (!matchSku) return false;
+    }
+    return true;
+  });
+
+  const badgeEl = document.getElementById('inbound-filter-count-badge');
+  if (poVal || dateVal || statusVal || skuVal) {
+    badgeEl.style.display = 'inline-block';
+    badgeEl.textContent = `Khớp lọc: ${filtered.length} / ${allInboundOrders.length}`;
+  } else {
+    badgeEl.style.display = 'none';
+  }
+
+  renderInboundTable(filtered);
+}
+
+function resetInboundFilters() {
+  if (document.getElementById('filter-po')) document.getElementById('filter-po').value = '';
+  if (document.getElementById('filter-date')) document.getElementById('filter-date').value = '';
+  if (document.getElementById('filter-status')) document.getElementById('filter-status').value = '';
+  if (document.getElementById('filter-sku')) document.getElementById('filter-sku').value = '';
+
+  const badgeEl = document.getElementById('inbound-filter-count-badge');
+  if (badgeEl) badgeEl.style.display = 'none';
+
+  renderInboundTable(allInboundOrders);
+  showToast('Đã đặt lại bộ lọc tìm kiếm.', 'info');
+}
+
+// 7. Load Inbound Orders
 function loadInboundOrders() {
   fetch('/api/inbound')
     .then(res => res.json())
     .then(res => {
       if (!res.success) return;
-      const orders = res.data || [];
-      const tbody = document.getElementById('inbound-orders-body');
-      tbody.innerHTML = '';
-
-      if (orders.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:30px; color:#64748b;">Chưa có đơn nhập nào. Bấm nút <strong>"⚡ Nạp Sheet IB từ file có sẵn"</strong> ở trên để tạo đơn.</td></tr>`;
-        return;
-      }
-
-      orders.forEach(ord => {
-        const tr = document.createElement('tr');
-
-        let statusHtml = '';
-        let putawayAllowedHtml = '';
-        let actionsHtml = '';
-
-        if (ord.status === 'CREATED') {
-          statusHtml = `<span class="status-pill created">Đã tạo đơn hàng nhập</span>`;
-          putawayAllowedHtml = `<span style="color:#64748b; font-size:12px;">🔒 Chưa nhận hàng</span>`;
-          actionsHtml = `
-            <button class="btn btn-red btn-sm" onclick="openReceiveModal('${ord.id}')">
-              <span>📥</span> Nhận Hàng (Vào InboundQC)
-            </button>
-          `;
-        } else if (ord.status === 'RECEIVED' || ord.status === 'PUTAWAY_IN_PROGRESS') {
-          statusHtml = `<span class="status-pill received">${ord.status === 'RECEIVED' ? 'Đã nhận hàng' : 'Đang cất kho'}</span>`;
-          putawayAllowedHtml = `<span style="color:#16a34a; font-weight:700;">✅ ĐƯỢC PHÉP PUTAWAY</span>`;
-          actionsHtml = `
-            <button class="btn btn-primary btn-sm" onclick="switchTab('putaway')">
-              <span>🚀</span> Cất Kho (Putaway PL.Tam)
-            </button>
-          `;
-        } else if (ord.status === 'PUTAWAY_COMPLETED') {
-          statusHtml = `<span class="status-pill putaway-complete">Đã cất kho hoàn tất</span>`;
-          putawayAllowedHtml = `<span style="color:#16a34a; font-weight:600;">🎉 Hoàn tất</span>`;
-          actionsHtml = `<span style="color:#16a34a; font-size:12px;">Đã lưu vào PL.Tam</span>`;
-        }
-
-        tr.innerHTML = `
-          <td><strong class="sku-code" style="color:#1e293b;">${ord.orderCode}</strong></td>
-          <td>${ord.orderDate}</td>
-          <td>${ord.supplier}</td>
-          <td><span class="loc-badge qc">📍 ${ord.receivingLocation || 'InboundQC'}</span></td>
-          <td style="text-align:center;"><strong>${ord.items.length}</strong></td>
-          <td style="text-align:right; font-weight:700; color:#0369a1;">${ord.totalExpectedQty.toLocaleString('vi-VN')} cái</td>
-          <td style="text-align:center;">${statusHtml}</td>
-          <td style="text-align:center;">${putawayAllowedHtml}</td>
-          <td style="text-align:center;">${actionsHtml}</td>
-        `;
-
-        tbody.appendChild(tr);
-      });
+      allInboundOrders = res.data || [];
+      applyInboundFilters();
     });
 }
 
-// 7. Receive Goods Modal (Receives into InboundQC)
+function renderInboundTable(orders) {
+  const tbody = document.getElementById('inbound-orders-body');
+  tbody.innerHTML = '';
+
+  if (orders.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:30px; color:#64748b;">Không có đơn hàng nào khớp với điều kiện lọc.</td></tr>`;
+    return;
+  }
+
+  orders.forEach(ord => {
+    const tr = document.createElement('tr');
+
+    let statusHtml = '';
+    let putawayAllowedHtml = '';
+    let actionsHtml = '';
+
+    if (ord.status === 'CREATED') {
+      statusHtml = `<span class="status-pill created">Đã tạo đơn hàng nhập</span>`;
+      putawayAllowedHtml = `<span style="color:#64748b; font-size:12px;">🔒 Chưa nhận hàng</span>`;
+      actionsHtml = `
+        <button class="btn btn-teal btn-sm" onclick="openReceiveModal('${ord.id}')">
+          <span>📥</span> Nhận Hàng (Vào InboundQC)
+        </button>
+      `;
+    } else if (ord.status === 'RECEIVED' || ord.status === 'PUTAWAY_IN_PROGRESS') {
+      statusHtml = `<span class="status-pill received">${ord.status === 'RECEIVED' ? 'Đã nhận hàng' : 'Đang cất kho'}</span>`;
+      putawayAllowedHtml = `<span style="color:var(--teal-700); font-weight:700;">✅ ĐƯỢC PHÉP PUTAWAY</span>`;
+      actionsHtml = `
+        <button class="btn btn-teal btn-sm" onclick="switchTab('putaway')">
+          <span>🚀</span> Cất Kho (Putaway PL.Tam)
+        </button>
+      `;
+    } else if (ord.status === 'PUTAWAY_COMPLETED') {
+      statusHtml = `<span class="status-pill putaway-complete">Đã cất kho hoàn tất</span>`;
+      putawayAllowedHtml = `<span style="color:var(--teal-700); font-weight:600;">🎉 Hoàn tất</span>`;
+      actionsHtml = `<span style="color:var(--teal-700); font-size:12px; font-weight:600;">Đã lưu vào PL.Tam</span>`;
+    }
+
+    tr.innerHTML = `
+      <td><strong class="sku-code" style="color:#0f172a;">${ord.orderCode}</strong></td>
+      <td><span class="po-code">${ord.poNumber || 'PO-4192784668'}</span></td>
+      <td>${ord.orderDate}</td>
+      <td>${ord.supplier}</td>
+      <td><span class="loc-badge qc">📍 ${ord.receivingLocation || 'InboundQC'}</span></td>
+      <td style="text-align:center;"><strong>${ord.items.length}</strong></td>
+      <td style="text-align:right; font-weight:700; color:var(--teal-700);">${ord.totalExpectedQty.toLocaleString('vi-VN')} cái</td>
+      <td style="text-align:center;">${statusHtml}</td>
+      <td style="text-align:center;">${putawayAllowedHtml}</td>
+      <td style="text-align:center;">${actionsHtml}</td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+}
+
+// 8. Receive Goods Modal (Receives into InboundQC)
 function openReceiveModal(orderId) {
   fetch(`/api/inbound/${orderId}`)
     .then(res => res.json())
@@ -405,12 +494,11 @@ function submitReceiveGoods() {
         loadInventoryData();
         loadDashboardStats();
 
-        // Prompt to go to Putaway
         setTimeout(() => {
           if (confirm('Hàng đã được tiếp nhận vào vị trí [InboundQC] và ĐƯỢC PHÉP PUTAWAY. Chuyển sang module Putaway để cất vào các kệ PL.Tam.01 - PL.Tam.100?')) {
             switchTab('putaway');
           }
-        }, 500);
+        }, 400);
       } else {
         showToast(result.message, 'error');
       }
@@ -418,7 +506,7 @@ function submitReceiveGoods() {
     .catch(err => showToast('Lỗi: ' + err.message, 'error'));
 }
 
-// 8. Putaway Module: List items in InboundQC ready for Putaway
+// 9. Putaway Module: List items in InboundQC ready for Putaway
 function loadPutawayData() {
   fetch('/api/putaway/ready')
     .then(res => res.json())
@@ -432,31 +520,31 @@ function loadPutawayData() {
       tbody.innerHTML = '';
 
       if (tasks.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:30px; color:#64748b;">Không có mặt hàng nào chờ cất kho. Các đơn hàng ở trạng thái <strong>"Đã nhận hàng"</strong> tại InboundQC sẽ hiển thị ở đây.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="11" style="text-align:center; padding:30px; color:#64748b;">Không có mặt hàng nào chờ cất kho. Các đơn hàng ở trạng thái <strong>"Đã nhận hàng"</strong> tại InboundQC sẽ hiển thị ở đây.</td></tr>`;
         return;
       }
 
       tasks.forEach(t => {
         const tr = document.createElement('tr');
 
-        // Formatted putaway allocations summary
         let allocSummaryHtml = '<span style="color:#94a3b8; font-size:12px;">Chưa cất</span>';
         if (t.putawayAllocations && t.putawayAllocations.length > 0) {
           allocSummaryHtml = t.putawayAllocations.map(a => `<span class="loc-badge" style="margin:2px;">${a.locationCode}: ${a.qty}</span>`).join(' ');
         }
 
         tr.innerHTML = `
-          <td><strong class="sku-code" style="color:#1e293b;">${t.orderCode}</strong></td>
+          <td><strong class="sku-code" style="color:#0f172a;">${t.orderCode}</strong></td>
+          <td><span class="po-code">${t.poNumber || 'PO-4192784668'}</span></td>
           <td><span class="sku-code">${t.sku}</span></td>
           <td><strong>${t.itemName}</strong></td>
           <td><span class="loc-badge" style="background:#f1f5f9; color:#475569; border-color:#cbd5e1;">${t.uom}</span></td>
           <td><span class="loc-badge qc">📍 InboundQC</span></td>
           <td style="text-align:right; font-weight:600;">${t.receivedQty}</td>
-          <td style="text-align:right; font-weight:600; color:#16a34a;">${t.putawayQty}</td>
-          <td style="text-align:right; font-weight:700; color:var(--hw-red); font-size:14px;">${t.remainingQty}</td>
+          <td style="text-align:right; font-weight:600; color:var(--teal-700);">${t.putawayQty}</td>
+          <td style="text-align:right; font-weight:700; color:var(--teal-800); font-size:14px;">${t.remainingQty}</td>
           <td>${allocSummaryHtml}</td>
           <td style="text-align:center;">
-            <button class="btn btn-red btn-sm" onclick='openPutawaySkuModal(${JSON.stringify(t)})'>
+            <button class="btn btn-teal btn-sm" onclick='openPutawaySkuModal(${JSON.stringify(t)})'>
               <span>🚀</span> Cất Kho (Đa Vị Trí)
             </button>
           </td>
@@ -467,7 +555,7 @@ function loadPutawayData() {
     });
 }
 
-// 9. Open Multi-Location Putaway Modal for a SKU
+// 10. Open Multi-Location Putaway Modal for a SKU
 function openPutawaySkuModal(task) {
   currentPutawayTask = task;
   putawayAllocations = [];
@@ -477,7 +565,6 @@ function openPutawaySkuModal(task) {
   document.getElementById('modal-putaway-uom').textContent = task.uom;
   document.getElementById('modal-putaway-total-qty').textContent = task.remainingQty;
 
-  // Initial allocation: if suggested locations available, add first one
   const firstLoc = (task.suggestedLocations && task.suggestedLocations[0]) || 'PL.Tam.01';
   putawayAllocations.push({
     locationCode: firstLoc,
@@ -493,27 +580,23 @@ function renderPutawayAllocations() {
   container.innerHTML = '';
 
   const totalRequired = currentPutawayTask.remainingQty;
-  let totalAllocated = 0;
 
   putawayAllocations.forEach((alloc, idx) => {
-    totalAllocated += alloc.qty || 0;
-
     const row = document.createElement('div');
     row.className = 'alloc-row';
     row.innerHTML = `
-      <span style="font-size:12px; font-weight:700; color:#64748b; width:65px;">Vị trí ${idx + 1}:</span>
+      <span style="font-size:12px; font-weight:700; color:#475569; width:65px;">Vị trí ${idx + 1}:</span>
       <input type="text" class="alloc-loc-input" list="valid-locations-datalist" value="${alloc.locationCode}" placeholder="PL.Tam.01 - 100" data-idx="${idx}">
       <span style="font-size:12px; color:#64748b;">Số lượng:</span>
       <input type="number" class="alloc-qty-input" value="${alloc.qty}" min="1" max="${totalRequired}" data-idx="${idx}">
       <span style="font-size:12px; color:#475569;">${currentPutawayTask.uom}</span>
-      <button class="btn btn-secondary btn-sm" style="color:#dc2626; margin-left:auto;" onclick="removePutawayAllocationRow(${idx})" title="Xóa dòng này">
+      <button class="btn btn-secondary btn-sm" style="color:var(--danger); margin-left:auto;" onclick="removePutawayAllocationRow(${idx})" title="Xóa dòng này">
         🗑️
       </button>
     `;
     container.appendChild(row);
   });
 
-  // Attach change events
   container.querySelectorAll('.alloc-loc-input').forEach(inp => {
     inp.addEventListener('input', (e) => {
       const idx = parseInt(e.target.dataset.idx, 10);
@@ -545,14 +628,14 @@ function updatePutawayAllocCounters() {
   remainingEl.textContent = remaining;
 
   if (remaining === 0) {
-    allocatedEl.style.color = '#16a34a';
-    remainingEl.style.color = '#16a34a';
+    allocatedEl.style.color = 'var(--success)';
+    remainingEl.style.color = 'var(--success)';
   } else if (remaining < 0) {
-    allocatedEl.style.color = '#dc2626';
-    remainingEl.style.color = '#dc2626';
+    allocatedEl.style.color = 'var(--danger)';
+    remainingEl.style.color = 'var(--danger)';
   } else {
-    allocatedEl.style.color = '#b45309';
-    remainingEl.style.color = '#dc2626';
+    allocatedEl.style.color = 'var(--warning)';
+    remainingEl.style.color = 'var(--danger)';
   }
 }
 
@@ -577,11 +660,10 @@ function removePutawayAllocationRow(idx) {
   renderPutawayAllocations();
 }
 
-// Auto split high-quantity SKU across multiple empty PL.Tam locations (e.g. 85 -> 45 in PL.Tam.01, 40 in PL.Tam.02)
 function autoSplitPutawayLocations() {
   if (!currentPutawayTask) return;
   const total = currentPutawayTask.remainingQty;
-  const capacityPerPallet = 45; // Reasonable pallet size
+  const capacityPerPallet = 45;
   const neededLocations = Math.max(1, Math.ceil(total / capacityPerPallet));
 
   putawayAllocations = [];
@@ -601,7 +683,7 @@ function autoSplitPutawayLocations() {
   showToast(`Đã tự động gợi ý phân bổ ${total} cái vào ${neededLocations} vị trí kệ PL.Tam.`, 'info');
 }
 
-// 10. Submit Multi-location Putaway for the SKU
+// 11. Submit Multi-location Putaway for the SKU
 function submitPutawaySku() {
   if (!currentPutawayTask || putawayAllocations.length === 0) return;
 
@@ -618,7 +700,6 @@ function submitPutawaySku() {
     return;
   }
 
-  // Validate all location codes: must be PL.Tam.01 to PL.Tam.100
   for (const alloc of putawayAllocations) {
     const code = (alloc.locationCode || '').trim();
     const match = code.match(/^PL\.Tam\.(\d{1,3})$/i);
@@ -631,7 +712,6 @@ function submitPutawaySku() {
       showToast(`Vị trí "${code}" nằm ngoài phạm vi được phép (PL.Tam.01 đến PL.Tam.100)!`, 'error');
       return;
     }
-    // Normalize format
     const formatted = num < 10 ? `0${num}` : `${num}`;
     alloc.locationCode = `PL.Tam.${formatted}`;
   }
@@ -669,7 +749,7 @@ function submitPutawaySku() {
     .catch(err => showToast('Lỗi: ' + err.message, 'error'));
 }
 
-// 11. Inventory Management Views
+// 12. Inventory Management Views
 function switchInventoryView(mode) {
   const sumView = document.getElementById('inv-view-summary');
   const detView = document.getElementById('inv-view-details');
@@ -681,22 +761,22 @@ function switchInventoryView(mode) {
 
   [sumView, detView, movView].forEach(v => v.style.display = 'none');
   [btnSum, btnDet, btnMov].forEach(b => {
-    b.classList.remove('btn-primary');
+    b.classList.remove('btn-teal');
     b.classList.add('btn-secondary');
   });
 
   if (mode === 'summary') {
     sumView.style.display = 'block';
     btnSum.classList.remove('btn-secondary');
-    btnSum.classList.add('btn-primary');
+    btnSum.classList.add('btn-teal');
   } else if (mode === 'details') {
     detView.style.display = 'block';
     btnDet.classList.remove('btn-secondary');
-    btnDet.classList.add('btn-primary');
+    btnDet.classList.add('btn-teal');
   } else if (mode === 'movements') {
     movView.style.display = 'block';
     btnMov.classList.remove('btn-secondary');
-    btnMov.classList.add('btn-primary');
+    btnMov.classList.add('btn-teal');
     loadStockMovements();
   }
 }
@@ -723,7 +803,6 @@ function loadInventoryData() {
         skuSummary.forEach(item => {
           const tr = document.createElement('tr');
 
-          // Build multi-location breakdown pills
           const locPills = item.locationBreakdown.map(lb => {
             const isQc = lb.location === 'InboundQC';
             const badgeClass = isQc ? 'loc-badge qc' : 'loc-badge';
@@ -734,7 +813,7 @@ function loadInventoryData() {
             <td><span class="sku-code">${item.sku}</span></td>
             <td><strong>${item.itemName}</strong></td>
             <td><span class="loc-badge" style="background:#f1f5f9; color:#475569; border-color:#cbd5e1;">${item.uom}</span></td>
-            <td style="text-align:right; font-weight:800; color:#0369a1; font-size:15px;">${item.totalQuantity.toLocaleString('vi-VN')}</td>
+            <td style="text-align:right; font-weight:800; color:var(--teal-700); font-size:15px;">${item.totalQuantity.toLocaleString('vi-VN')}</td>
             <td style="text-align:right; font-weight:700; color:#b45309;">${item.inboundQcQty > 0 ? item.inboundQcQty : '-'}</td>
             <td>${locPills}</td>
           `;
@@ -758,7 +837,7 @@ function loadInventoryData() {
           <td><span class="loc-badge" style="background:#f1f5f9; color:#475569; border-color:#cbd5e1;">${item.uom}</span></td>
           <td><span class="sku-code" style="color:#64748b; background:#f8fafc; border-color:transparent;">${item.batchNo}</span></td>
           <td style="font-size:12px; color:#b45309;">${item.expiryDate || '-'}</td>
-          <td style="text-align:right; font-weight:700; color:#0369a1;">${item.quantity.toLocaleString('vi-VN')}</td>
+          <td style="text-align:right; font-weight:700; color:var(--teal-700);">${item.quantity.toLocaleString('vi-VN')}</td>
           <td style="font-size:12px; color:#64748b;">${updatedDate}</td>
         `;
         detTbody.appendChild(tr);
@@ -786,12 +865,12 @@ function loadStockMovements() {
         tr.innerHTML = `
           <td style="font-size:12px; color:#64748b;">${timeStr}</td>
           <td>${typePill}</td>
-          <td><strong class="sku-code" style="color:#1e293b;">${m.orderId}</strong></td>
+          <td><strong class="sku-code" style="color:#0f172a;">${m.orderId}</strong></td>
           <td><span class="sku-code">${m.sku}</span></td>
           <td><strong>${m.itemName}</strong></td>
           <td><span class="loc-badge ${m.fromLocation === 'InboundQC' ? 'qc' : ''}">${m.fromLocation}</span></td>
           <td><span class="loc-badge ${m.toLocation === 'InboundQC' ? 'qc' : ''}">${m.toLocation}</span></td>
-          <td style="text-align:right; font-weight:700; color:#0369a1;">+${m.quantity}</td>
+          <td style="text-align:right; font-weight:700; color:var(--teal-700);">+${m.quantity}</td>
           <td style="font-size:12px; color:#64748b;">${m.note || '-'}</td>
         `;
         tbody.appendChild(tr);
@@ -799,7 +878,7 @@ function loadStockMovements() {
     });
 }
 
-// 12. Load Locations for Filter Dropdown
+// 13. Load Locations for Filter Dropdown
 function loadLocations() {
   fetch('/api/locations')
     .then(res => res.json())
@@ -817,7 +896,7 @@ function loadLocations() {
     });
 }
 
-// 13. Outbound Module (Sheet OB)
+// 14. Outbound Module (Sheet OB)
 function loadSheetOBOutbound() {
   showToast('Đang trích xuất 183 dòng đơn hàng Vinmart+ từ sheet "OB"...', 'info');
   fetch('/api/outbound/load-default', { method: 'POST' })
@@ -852,10 +931,10 @@ function loadOutboundData() {
       orders.forEach(o => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td><strong class="sku-code" style="color:#1e293b;">${o.id}</strong></td>
+          <td><strong class="sku-code" style="color:#0f172a;">${o.id}</strong></td>
           <td><strong>${o.customerName}</strong></td>
           <td style="text-align:center;">${o.items.length} SKU</td>
-          <td style="text-align:right; font-weight:700; color:#0369a1;">${o.totalQty} cái</td>
+          <td style="text-align:right; font-weight:700; color:var(--teal-700);">${o.totalQty} cái</td>
           <td style="text-align:center;"><span class="status-pill received">Chờ xuất kho</span></td>
         `;
         tbody.appendChild(tr);
@@ -863,11 +942,11 @@ function loadOutboundData() {
     });
 }
 
-// 14. Dashboard Stats
+// 15. Dashboard Stats
 function loadDashboardStats() {
   fetch('/api/dashboard/stats')
     .then(res => res.json())
     .then(result => {
-      // stats can be used in topbar or tooltips
+      // stats available
     });
 }

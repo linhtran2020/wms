@@ -13,30 +13,41 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Configure Multer for file uploads (memory storage: works on Vercel's read-only filesystem)
+// Configure Multer for file uploads (memory storage: compatible with Vercel serverless)
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 4 * 1024 * 1024 }
+  limits: { fileSize: 8 * 1024 * 1024 }
 });
 
-// ===== Storage backend =====
-// On Vercel: Upstash Redis via REST (env vars from Vercel Marketplace Upstash integration or Upstash console)
+// ===== PERSISTENT STORAGE ENGINE FOR VERCEL & LOCAL =====
+// 1. Vercel Blob (@vercel/blob)
+let vercelBlob = null;
+try {
+  vercelBlob = require('@vercel/blob');
+} catch (e) {}
+
+const BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN;
+const USE_BLOB = Boolean(BLOB_TOKEN && vercelBlob);
+
+// 2. Upstash Redis (REST)
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 const USE_REDIS = Boolean(REDIS_URL && REDIS_TOKEN);
 const REDIS_KEY = process.env.WMS_DB_KEY || 'wms:db';
 
-// Local mode only: ensure data directory exists
-if (!USE_REDIS) {
+const DB_PATH = path.join(__dirname, 'data', 'db.json');
+const DEFAULT_EXCEL_FILE = path.join(__dirname, 'Booking GIao hàng Nhanh ngày 16.07.2026.xlsx');
+
+// Ensure local data dir if running locally
+if (!USE_BLOB && !USE_REDIS) {
   try {
     const p = path.join(__dirname, 'data');
     if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
   } catch (e) {}
 }
 
-const DB_PATH = path.join(__dirname, 'data', 'db.json');
-let dbCache = null; // In-memory copy, hydrated from Redis at the start of each API request
-let pendingSave = null; // Promise of the latest Redis write
+let dbCache = null;
+let pendingSave = null;
 
 async function redisCommand(args) {
   const resp = await fetch(REDIS_URL, {
@@ -48,42 +59,6 @@ async function redisCommand(args) {
   if (!resp.ok || json.error) throw new Error(json.error || `Redis HTTP ${resp.status}`);
   return json.result;
 }
-
-function emptyDB() {
-  return {
-    inboundOrders: [],
-    putawayTasks: [],
-    inventory: [],
-    stockMovements: [],
-    outboundOrders: [],
-    locations: generateDefaultLocations()
-  };
-}
-
-// Middleware: hydrate DB from Redis before API handlers, and wait for Redis writes before responding
-app.use('/api', async (req, res, next) => {
-  if (!USE_REDIS) return next();
-  try {
-    const raw = await redisCommand(['GET', REDIS_KEY]);
-    dbCache = raw ? JSON.parse(raw) : null;
-  } catch (err) {
-    console.error('Redis read error:', err);
-    return res.status(500).json({ success: false, message: 'Không đọc được database (Redis): ' + err.message });
-  }
-  pendingSave = null;
-  const originalJson = res.json.bind(res);
-  res.json = (body) => {
-    Promise.resolve(pendingSave)
-      .then(() => originalJson(body))
-      .catch(err => {
-        res.status(500);
-        originalJson({ success: false, message: 'Không lưu được database (Redis): ' + err.message });
-      });
-    return res;
-  };
-  next();
-});
-const DEFAULT_EXCEL_FILE = path.join(__dirname, 'Booking GIao hàng Nhanh ngày 16.07.2026.xlsx');
 
 // Generate 100 PL.Tam locations: PL.Tam.01 to PL.Tam.100 + InboundQC
 function generateDefaultLocations() {
@@ -114,16 +89,26 @@ function generateDefaultLocations() {
   return locs;
 }
 
+function emptyDB() {
+  return {
+    inboundOrders: [],
+    putawayTasks: [],
+    inventory: [],
+    stockMovements: [],
+    outboundOrders: [],
+    locations: generateDefaultLocations()
+  };
+}
+
 // Validate Putaway Location: must be PL.Tam.01 to PL.Tam.100
 function isValidPutawayLocation(code) {
   if (!code || typeof code !== 'string') return false;
-  const match = code.trim().match(/^PL\.Tam\.(\d{2,3})$/i);
+  const match = code.trim().match(/^PL\.Tam\.(\d{1,3})$/i);
   if (!match) return false;
   const num = parseInt(match[1], 10);
   return num >= 1 && num <= 100;
 }
 
-// Helper to normalize location format: e.g. PL.Tam.1 -> PL.Tam.01
 function normalizePutawayLocation(code) {
   if (!code) return '';
   const match = code.trim().match(/^PL\.Tam\.(\d{1,3})$/i);
@@ -135,64 +120,119 @@ function normalizePutawayLocation(code) {
 
 // Database Read/Write Helper
 function loadDB() {
-  if (USE_REDIS) {
-    if (!dbCache) {
-      dbCache = emptyDB();
-      saveDB(dbCache);
-    } else if (!dbCache.locations || dbCache.locations.length < 50 || !dbCache.locations.some(l => l.code === 'InboundQC')) {
+  if (dbCache) {
+    if (!dbCache.locations || dbCache.locations.length < 50 || !dbCache.locations.some(l => l.code === 'InboundQC')) {
       dbCache.locations = generateDefaultLocations();
       saveDB(dbCache);
     }
     return dbCache;
   }
-  try {
-    if (!fs.existsSync(DB_PATH)) {
-      const initData = {
-        inboundOrders: [],
-        putawayTasks: [],
-        inventory: [],
-        stockMovements: [],
-        outboundOrders: [],
-        locations: generateDefaultLocations()
-      };
-      saveDB(initData);
-      return initData;
-    }
-    const raw = fs.readFileSync(DB_PATH, 'utf-8');
-    const parsed = JSON.parse(raw);
 
-    // Ensure InboundQC and PL.Tam.01-100 exist
-    if (!parsed.locations || parsed.locations.length < 50 || !parsed.locations.some(l => l.code === 'InboundQC')) {
-      parsed.locations = generateDefaultLocations();
-      saveDB(parsed);
+  // Local fallback
+  try {
+    if (fs.existsSync(DB_PATH)) {
+      const raw = fs.readFileSync(DB_PATH, 'utf-8');
+      dbCache = JSON.parse(raw);
+    } else {
+      dbCache = emptyDB();
+      saveDB(dbCache);
     }
-    return parsed;
   } catch (err) {
-    console.error('Error reading db.json:', err);
-    return {
-      inboundOrders: [],
-      putawayTasks: [],
-      inventory: [],
-      stockMovements: [],
-      outboundOrders: [],
-      locations: generateDefaultLocations()
-    };
+    console.error('Error reading local db.json:', err);
+    dbCache = emptyDB();
   }
+
+  if (!dbCache.locations || dbCache.locations.length < 50 || !dbCache.locations.some(l => l.code === 'InboundQC')) {
+    dbCache.locations = generateDefaultLocations();
+    saveDB(dbCache);
+  }
+
+  return dbCache;
 }
 
 function saveDB(data) {
-  if (USE_REDIS) {
-    dbCache = data;
-    pendingSave = redisCommand(['SET', REDIS_KEY, JSON.stringify(data)]);
-    pendingSave.catch(err => console.error('Redis write error:', err));
+  dbCache = data;
+
+  // 1. Save to Vercel Blob if available
+  if (USE_BLOB) {
+    pendingSave = vercelBlob.put('wms/db.json', JSON.stringify(data), {
+      access: 'private',
+      addRandomSuffix: false
+    }).catch(err => console.error('Vercel Blob write error:', err));
     return;
   }
+
+  // 2. Save to Upstash Redis if available
+  if (USE_REDIS) {
+    pendingSave = redisCommand(['SET', REDIS_KEY, JSON.stringify(data)])
+      .catch(err => console.error('Redis write error:', err));
+    return;
+  }
+
+  // 3. Local filesystem
   try {
     fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf-8');
   } catch (err) {
     console.error('Error saving db.json:', err);
   }
 }
+
+// Middleware: hydrate DB from Cloud storage on Vercel before API handlers
+app.use('/api', async (req, res, next) => {
+  // If Blob storage is active and dbCache not yet hydrated from cloud
+  if (USE_BLOB && !dbCache) {
+    try {
+      if (typeof vercelBlob.get === 'function') {
+        const result = await vercelBlob.get('wms/db.json', { access: 'private' });
+        if (result && result.stream) {
+          const chunks = [];
+          for await (const chunk of result.stream) chunks.push(chunk);
+          const raw = Buffer.concat(chunks).toString('utf-8');
+          if (raw && raw.trim().startsWith('{')) {
+            dbCache = JSON.parse(raw);
+          }
+        }
+      }
+      if (!dbCache) {
+        const list = await vercelBlob.list({ prefix: 'wms/db.json' });
+        if (list && list.blobs && list.blobs.length > 0) {
+          const resp = await fetch(list.blobs[0].url, {
+            headers: BLOB_TOKEN ? { Authorization: `Bearer ${BLOB_TOKEN}` } : {}
+          });
+          if (resp.ok) {
+            dbCache = await resp.json();
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Could not read from Vercel Blob:', e.message);
+    }
+  }
+
+  // If Redis storage is active
+  if (USE_REDIS) {
+    try {
+      const raw = await redisCommand(['GET', REDIS_KEY]);
+      if (raw) dbCache = JSON.parse(raw);
+    } catch (e) {
+      console.warn('Could not read from Redis:', e.message);
+    }
+  }
+
+  // Wait for pending writes before responding
+  const originalJson = res.json.bind(res);
+  res.json = (body) => {
+    Promise.resolve(pendingSave)
+      .then(() => originalJson(body))
+      .catch(err => {
+        console.error('Persistence error:', err);
+        originalJson(body);
+      });
+    return res;
+  };
+
+  next();
+});
 
 // Smart Location Suggestion among PL.Tam.01 to PL.Tam.100
 function suggestPutawayLocations(neededLocationsCount, locations, inventory) {
@@ -210,7 +250,7 @@ function suggestPutawayLocations(neededLocationsCount, locations, inventory) {
   return suggestions.length > 0 ? suggestions : ['PL.Tam.01'];
 }
 
-// Excel Parsing Logic for Inbound (Sheet 'IB')
+// Excel Parsing Logic for Inbound (Sheet 'IB' + Sheet 'KHGN' for PO)
 function parseInboundWorkbook(workbook, fileName = 'Uploaded.xlsx') {
   const sheetNames = workbook.SheetNames;
   let targetSheetName = sheetNames.find(n => n.toUpperCase().trim() === 'IB');
@@ -221,6 +261,22 @@ function parseInboundWorkbook(workbook, fileName = 'Uploaded.xlsx') {
   const sheet = workbook.Sheets[targetSheetName];
   if (!sheet) {
     throw new Error(`Không tìm thấy sheet IB trong file Excel.`);
+  }
+
+  // Extract PO number if KHGN sheet exists
+  let extractedPo = 'PO-4192784668';
+  if (workbook.Sheets['KHGN']) {
+    try {
+      const khgnRows = XLSX.utils.sheet_to_json(workbook.Sheets['KHGN'], { header: 1 });
+      for (let r = 0; r < Math.min(10, khgnRows.length); r++) {
+        const row = khgnRows[r] || [];
+        const poCell = row.find(c => String(c).match(/^\d{8,12}$/));
+        if (poCell) {
+          extractedPo = `PO-${poCell}`;
+          break;
+        }
+      }
+    } catch (e) {}
   }
 
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
@@ -293,6 +349,7 @@ function parseInboundWorkbook(workbook, fileName = 'Uploaded.xlsx') {
   return {
     sourceFileName: fileName,
     sheetName: targetSheetName,
+    poNumber: extractedPo,
     items,
     itemCount: items.length,
     totalExpectedQty
@@ -318,7 +375,7 @@ function parseOutboundWorkbook(workbook, fileName = 'Uploaded.xlsx') {
     if (!r || r.length < 10) continue;
 
     const orderNum = String(r[1] || '').trim();
-    const customer = String(r[4] || 'Vinmart+ HCM').trim();
+    const customer = String(r[4] || 'Vinmart+').trim();
     const sku = String(r[8] || '').trim();
     const itemName = String(r[9] || '').trim();
     const uom = String(r[10] || 'CAI').trim();
@@ -368,12 +425,10 @@ app.get('/api/dashboard/stats', (req, res) => {
   const totalInventoryUnits = db.inventory.reduce((sum, i) => sum + (i.quantity || 0), 0);
   const totalSKUs = new Set(db.inventory.filter(i => i.quantity > 0).map(i => i.sku)).size;
 
-  // Quantity currently waiting in InboundQC
   const inboundQCUnits = db.inventory
     .filter(i => i.location === 'InboundQC')
     .reduce((sum, i) => sum + (i.quantity || 0), 0);
 
-  // Capacity in PL.Tam.01 to PL.Tam.100
   const plTamLocations = db.locations.filter(l => l.code.startsWith('PL.Tam.'));
   const totalCapacity = plTamLocations.reduce((sum, l) => sum + (l.capacity || 100), 0);
   const usedCapacity = plTamLocations.reduce((sum, l) => sum + (l.current || 0), 0);
@@ -398,6 +453,7 @@ app.get('/api/dashboard/stats', (req, res) => {
         usedCapacity,
         totalCapacity
       },
+      storageBackend: USE_BLOB ? 'Vercel Blob' : (USE_REDIS ? 'Upstash Redis' : 'Local JSON'),
       recentMovements: db.stockMovements.slice(-10).reverse()
     }
   });
@@ -445,10 +501,10 @@ app.post('/api/inbound/load-sample', (req, res) => {
   }
 });
 
-// 4. Create Inbound Order (Trạng thái: "Đã tạo đơn hàng nhập")
+// 4. Create Inbound Order with PO Number support
 app.post('/api/inbound/create', (req, res) => {
   try {
-    const { orderCode, supplier, orderDate, note, items, sourceFileName } = req.body;
+    const { orderCode, poNumber, supplier, orderDate, note, items, sourceFileName } = req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ success: false, message: 'Danh sách mặt hàng nhập không được rỗng.' });
@@ -459,20 +515,22 @@ app.post('/api/inbound/create', (req, res) => {
     const dateStr = (orderDate || new Date().toISOString().slice(0, 10)).replace(/-/g, '');
     const countToday = db.inboundOrders.filter(o => o.orderCode && o.orderCode.includes(dateStr)).length + 1;
     const finalOrderCode = (orderCode && orderCode.trim()) || `IB-${dateStr}-${String(countToday).padStart(4, '0')}`;
+    const finalPo = (poNumber && poNumber.trim()) || `PO-4192784668`;
 
     const totalExpectedQty = items.reduce((sum, it) => sum + (parseInt(it.expectedQty, 10) || 0), 0);
 
     const newOrder = {
       id: finalOrderCode,
       orderCode: finalOrderCode,
+      poNumber: finalPo, // Trọng tâm: Quản lý PO
       supplier: supplier || 'Giao Hàng Nhanh (GHN) - Lấy Date Mới trên 70%',
       orderDate: orderDate || new Date().toISOString().slice(0, 10),
       sourceFileName: sourceFileName || 'Booking GIao hàng Nhanh ngày 16.07.2026.xlsx',
       note: note || 'Đơn nhập hàng tươi theo kế hoạch phân bổ GHN',
-      status: 'CREATED', // YÊU CẦU: Trạng thái ban đầu là "Đã tạo đơn hàng nhập"
+      status: 'CREATED', // Trạng thái ban đầu: "Đã tạo đơn hàng nhập"
       statusLabel: 'Đã tạo đơn hàng nhập',
-      putawayAllowed: false, // Chưa được phép putaway cho đến khi nhận hàng
-      receivingLocation: 'InboundQC', // YÊU CẦU: Vị trí nhận hàng mặc định là InboundQC
+      putawayAllowed: false,
+      receivingLocation: 'InboundQC', // Vị trí nhận mặc định InboundQC
       items: items.map((it, idx) => ({
         stt: idx + 1,
         sku: String(it.sku),
@@ -481,7 +539,7 @@ app.post('/api/inbound/create', (req, res) => {
         expectedQty: parseInt(it.expectedQty, 10) || 0,
         receivedQty: parseInt(it.receivedQty || it.expectedQty, 10) || 0,
         putawayQty: 0,
-        putawayAllocations: [], // Sẽ lưu chi tiết nhiều vị trí PL.Tam và số lượng tương ứng
+        putawayAllocations: [],
         batchNo: it.batchNo || `LOT-${dateStr.slice(2)}`,
         expiryDate: it.expiryDate || new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10)
       })),
@@ -497,7 +555,7 @@ app.post('/api/inbound/create', (req, res) => {
 
     res.json({
       success: true,
-      message: `Tạo thành công đơn nhập ${newOrder.orderCode}. Trạng thái: "Đã tạo đơn hàng nhập".`,
+      message: `Tạo thành công đơn nhập ${newOrder.orderCode} (PO: ${newOrder.poNumber}). Trạng thái: "Đã tạo đơn hàng nhập".`,
       data: newOrder
     });
   } catch (err) {
@@ -506,10 +564,37 @@ app.post('/api/inbound/create', (req, res) => {
   }
 });
 
-// 5. Get all Inbound Orders
+// 5. Get all Inbound Orders with Filter Support (PO, Ngày Nhập, Trạng Thái, SKU)
 app.get('/api/inbound', (req, res) => {
   const db = loadDB();
-  res.json({ success: true, data: db.inboundOrders });
+  const { po, date, status, sku } = req.query;
+
+  let orders = [...db.inboundOrders];
+
+  if (po) {
+    const p = po.toLowerCase().trim();
+    orders = orders.filter(o =>
+      (o.poNumber && o.poNumber.toLowerCase().includes(p)) ||
+      (o.orderCode && o.orderCode.toLowerCase().includes(p))
+    );
+  }
+
+  if (date) {
+    orders = orders.filter(o => o.orderDate === date);
+  }
+
+  if (status) {
+    orders = orders.filter(o => o.status === status);
+  }
+
+  if (sku) {
+    const s = sku.toLowerCase().trim();
+    orders = orders.filter(o =>
+      o.items && o.items.some(it => it.sku.toLowerCase().includes(s) || it.itemName.toLowerCase().includes(s))
+    );
+  }
+
+  res.json({ success: true, data: orders });
 });
 
 // 6. Get Single Inbound Order by ID
@@ -522,9 +607,7 @@ app.get('/api/inbound/:id', (req, res) => {
   res.json({ success: true, data: order });
 });
 
-// 7. Receive Goods (Xác nhận nhận hàng vào vị trí mặc định InboundQC)
-// YÊU CẦU: "Sau khi nhận hàng vào kho sẽ nhận vào vị trí mặc định là InboundQC"
-// "sau khi nhận hàng xong thì trạng thái chuyển thành đã nhận hàng và được phép putaway"
+// 7. Receive Goods into default location InboundQC
 app.post('/api/inbound/:id/receive', (req, res) => {
   try {
     const { receivedItems, receiverNote } = req.body;
@@ -587,7 +670,7 @@ app.post('/api/inbound/:id/receive', (req, res) => {
           sku: it.sku,
           itemName: it.itemName,
           uom: it.uom,
-          location: 'InboundQC', // YÊU CẦU: Nhận vào vị trí mặc định InboundQC
+          location: 'InboundQC',
           batchNo: it.batchNo,
           expiryDate: it.expiryDate,
           quantity: it.receivedQty,
@@ -609,11 +692,10 @@ app.post('/api/inbound/:id/receive', (req, res) => {
         quantity: it.receivedQty,
         batchNo: it.batchNo,
         expiryDate: it.expiryDate,
-        note: `Nhận hàng đơn ${order.orderCode} vào vị trí InboundQC`
+        note: `Nhận hàng đơn ${order.orderCode} (PO: ${order.poNumber}) vào vị trí InboundQC`
       });
     });
 
-    // Update InboundQC location occupancy
     const inboundQcLoc = db.locations.find(l => l.code === 'InboundQC');
     if (inboundQcLoc) {
       inboundQcLoc.current = (inboundQcLoc.current || 0) + totalReceived;
@@ -624,7 +706,7 @@ app.post('/api/inbound/:id/receive', (req, res) => {
 
     res.json({
       success: true,
-      message: `Đơn ${order.orderCode} đã nhận ${totalReceived} cái vào vị trí mặc định [InboundQC]. Trạng thái: "Đã nhận hàng" & ĐƯỢC PHÉP PUTAWAY!`,
+      message: `Đơn ${order.orderCode} (PO: ${order.poNumber}) đã nhận ${totalReceived} cái vào vị trí [InboundQC]. ĐÃ ĐƯỢC PHÉP PUTAWAY!`,
       data: order
     });
   } catch (err) {
@@ -636,20 +718,25 @@ app.post('/api/inbound/:id/receive', (req, res) => {
 // 8. Putaway: Get items ready for putaway from InboundQC
 app.get('/api/putaway/ready', (req, res) => {
   const db = loadDB();
+  const { sku, po } = req.query;
   const readyOrders = db.inboundOrders.filter(o => o.putawayAllowed && o.status !== 'PUTAWAY_COMPLETED');
 
-  const tasks = [];
+  let tasks = [];
   readyOrders.forEach(order => {
+    if (po && !order.poNumber?.toLowerCase().includes(po.toLowerCase())) return;
+
     order.items.forEach(it => {
+      if (sku && !it.sku.toLowerCase().includes(sku.toLowerCase()) && !it.itemName.toLowerCase().includes(sku.toLowerCase())) return;
+
       const remainingQty = (it.receivedQty || it.expectedQty) - (it.putawayQty || 0);
       if (remainingQty > 0) {
-        // Find suggested PL.Tam locations (e.g. 1 location per 50 units)
         const locCountNeeded = Math.max(1, Math.ceil(remainingQty / 45));
         const suggestedLocs = suggestPutawayLocations(locCountNeeded, db.locations, db.inventory);
 
         tasks.push({
           orderId: order.id,
           orderCode: order.orderCode,
+          poNumber: order.poNumber,
           sku: it.sku,
           itemName: it.itemName,
           uom: it.uom,
@@ -679,15 +766,10 @@ app.get('/api/putaway/ready', (req, res) => {
   });
 });
 
-// 9. Putaway: Execute Putaway with Multi-location Allocation per SKU
-// YÊU CẦU:
-// "Khi putaway theo SKU sẽ có trường hợp 1 SKU với số lượng nhiều sẽ chiếm nhiều vị trí
-// nên khi cập nhật vào tồn kho sẽ cần phải cập nhật đầy đủ vị trí và số lượng tương ứng tại mỗi vị trí"
-// "Vị trí được phép putaway được phép nhập là PL.Tam.01 đến PL.Tam.100"
+// 9. Putaway: Multi-location Allocation per SKU (PL.Tam.01 to PL.Tam.100)
 app.post('/api/putaway/execute', (req, res) => {
   try {
     const { orderId, items } = req.body;
-    // items: [ { sku, allocations: [ { locationCode: 'PL.Tam.01', qty: 40 }, { locationCode: 'PL.Tam.02', qty: 45 } ] } ]
     if (!orderId || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ success: false, message: 'Dữ liệu phân bổ cất kho không hợp lệ.' });
     }
@@ -706,7 +788,6 @@ app.post('/api/putaway/execute', (req, res) => {
     const errors = [];
     const executionPlan = [];
 
-    // 1. Validate all requested allocations
     items.forEach(itPlan => {
       const sku = String(itPlan.sku);
       const orderItem = order.items.find(i => String(i.sku) === sku);
@@ -722,14 +803,13 @@ app.post('/api/putaway/execute', (req, res) => {
         return;
       }
 
-      itPlan.allocations.forEach((alloc, aIdx) => {
+      itPlan.allocations.forEach((alloc) => {
         const rawLoc = String(alloc.locationCode || '').trim();
         const normLoc = normalizePutawayLocation(rawLoc);
         const qty = parseInt(alloc.qty, 10);
 
         if (!qty || qty <= 0) return;
 
-        // YÊU CẦU: Vị trí được phép putaway là PL.Tam.01 đến PL.Tam.100
         if (!isValidPutawayLocation(normLoc)) {
           errors.push(`Vị trí "${rawLoc}" không hợp lệ! Vị trí cất kho chỉ được phép nhập từ PL.Tam.01 đến PL.Tam.100.`);
           return;
@@ -759,11 +839,9 @@ app.post('/api/putaway/execute', (req, res) => {
       return res.status(400).json({ success: false, message: 'Chưa có dòng phân bổ vị trí nào có số lượng > 0.' });
     }
 
-    // 2. Execute Stock Transfers: from InboundQC to respective PL.Tam locations
     executionPlan.forEach(plan => {
       const { orderItem, sku, locationCode, qty, batchNo, expiryDate } = plan;
 
-      // Deduct from InboundQC in inventory
       const inboundQcInv = db.inventory.find(
         inv => inv.sku === sku && inv.location === 'InboundQC' && inv.batchNo === batchNo
       );
@@ -772,7 +850,6 @@ app.post('/api/putaway/execute', (req, res) => {
         inboundQcInv.lastUpdated = new Date().toISOString();
       }
 
-      // Add to destination location in inventory
       const destInv = db.inventory.find(
         inv => inv.sku === sku && inv.location === locationCode && inv.batchNo === batchNo
       );
@@ -785,7 +862,7 @@ app.post('/api/putaway/execute', (req, res) => {
           sku,
           itemName: orderItem.itemName,
           uom: orderItem.uom,
-          location: locationCode, // PL.Tam.xx
+          location: locationCode,
           batchNo,
           expiryDate,
           quantity: qty,
@@ -793,7 +870,6 @@ app.post('/api/putaway/execute', (req, res) => {
         });
       }
 
-      // Update location current occupancy
       const locObj = db.locations.find(l => l.code === locationCode);
       if (locObj) {
         locObj.current = (locObj.current || 0) + qty;
@@ -803,7 +879,6 @@ app.post('/api/putaway/execute', (req, res) => {
         inboundQcLoc.current = Math.max(0, (inboundQcLoc.current || 0) - qty);
       }
 
-      // Update item in order
       orderItem.putawayQty = (orderItem.putawayQty || 0) + qty;
       if (!orderItem.putawayAllocations) orderItem.putawayAllocations = [];
       orderItem.putawayAllocations.push({
@@ -812,7 +887,6 @@ app.post('/api/putaway/execute', (req, res) => {
         timestamp: new Date().toISOString()
       });
 
-      // Record Stock Movement: InboundQC -> PL.Tam.xx
       db.stockMovements.push({
         id: `MOV-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         timestamp: new Date().toISOString(),
@@ -826,14 +900,12 @@ app.post('/api/putaway/execute', (req, res) => {
         quantity: qty,
         batchNo,
         expiryDate,
-        note: `Cất kho đơn ${order.orderCode}: ${qty} cái vào kệ ${locationCode}`
+        note: `Cất kho đơn ${order.orderCode} (PO: ${order.poNumber}): ${qty} cái vào kệ ${locationCode}`
       });
     });
 
-    // Clean up empty InboundQC rows
     db.inventory = db.inventory.filter(inv => inv.quantity > 0);
 
-    // Check if order is completely put away
     const allCompleted = order.items.every(it => (it.putawayQty || 0) >= (it.receivedQty || it.expectedQty));
     if (allCompleted) {
       order.status = 'PUTAWAY_COMPLETED';
@@ -861,7 +933,7 @@ app.post('/api/putaway/execute', (req, res) => {
   }
 });
 
-// 10. Inventory API: Real-time stock levels
+// 10. Inventory API: Real-time stock levels with filters
 app.get('/api/inventory', (req, res) => {
   const db = loadDB();
   const { search, location, sku } = req.query;
@@ -876,10 +948,9 @@ app.get('/api/inventory', (req, res) => {
     items = items.filter(i => i.location === location);
   }
   if (sku) {
-    items = items.filter(i => i.sku === sku);
+    items = items.filter(i => i.sku.toLowerCase().includes(sku.toLowerCase()));
   }
 
-  // Aggregate by SKU
   const skuSummaryMap = new Map();
   items.forEach(it => {
     if (!skuSummaryMap.has(it.sku)) {
@@ -889,7 +960,7 @@ app.get('/api/inventory', (req, res) => {
         uom: it.uom,
         totalQuantity: 0,
         inboundQcQty: 0,
-        locations: new Map() // location -> qty
+        locations: new Map()
       });
     }
     const entry = skuSummaryMap.get(it.sku);
@@ -986,14 +1057,7 @@ app.get('/api/outbound', (req, res) => {
 
 // 14. Reset System Data
 app.post('/api/system/reset-demo', (req, res) => {
-  const cleanDB = {
-    inboundOrders: [],
-    putawayTasks: [],
-    inventory: [],
-    stockMovements: [],
-    outboundOrders: [],
-    locations: generateDefaultLocations()
-  };
+  const cleanDB = emptyDB();
   saveDB(cleanDB);
   res.json({ success: true, message: 'Đã thiết lập lại dữ liệu hệ thống GHN WMS (InboundQC & PL.Tam.01 đến PL.Tam.100).' });
 });
@@ -1006,7 +1070,7 @@ if (require.main === module) {
   const server = app.listen(PORT, () => {
     console.log(`====================================================`);
     console.log(`🚀 GHN WMS Server đang chạy tại: http://localhost:${PORT}`);
-    console.log(`💾 Storage: ${USE_REDIS ? 'Upstash Redis' : 'data/db.json (local)'}`);
+    console.log(`💾 Storage: ${USE_BLOB ? 'Vercel Blob' : (USE_REDIS ? 'Upstash Redis' : 'data/db.json (local)')}`);
     console.log(`====================================================`);
   });
 
