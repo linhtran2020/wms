@@ -15,6 +15,7 @@ npm start   # http://localhost:3000, dữ liệu lưu ở data/db.json
 ```
 
 ## Deploy Vercel
+- **Production URL**: [https://wms-ghnlogs.vercel.app](https://wms-ghnlogs.vercel.app)
 - UI tĩnh trong `public/`, API Express qua `api/index.js` (xem `vercel.json`).
 - Vercel không ghi file được → cần **Upstash Redis**:
   - Vercel Dashboard → Project → Storage → Marketplace → **Upstash for Redis** → Connect
